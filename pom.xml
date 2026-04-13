@@ -195,9 +195,9 @@
 
     <spark2.version>2.4.8</spark2.version>
     <spark3.version>3.5.8</spark3.version>
-    <kafka2.version>2.8.2</kafka2.version>
-    <kafka3.version>3.9.1</kafka3.version>
-    <kafka4.version>4.1.1</kafka4.version>
+    <kafka2.version>3.9.2</kafka2.version>
+    <kafka3.version>3.9.2</kafka3.version>
+    <kafka4.version>3.9.2</kafka4.version>
     <confluent.version>7.9.5</confluent.version>
     <pulsar.version>4.0.8</pulsar.version>
     <flink.version>1.20.3</flink.version>
