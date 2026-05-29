@@ -58,6 +58,7 @@ import it.unimi.dsi.fastutil.objects.ObjectSet;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -1145,11 +1146,19 @@ public class ObjectSerDeUtils {
       return Sketch.wrap(Memory.wrap(bytes));
     }
 
+    /**
+     * Wraps the buffer directly: {@link Sketch#wrap(Memory)} is zero-copy and retains a reference
+     * to the underlying memory. The caller is responsible for keeping the buffer's bytes alive for
+     * as long as the returned {@code Sketch} is in use. Broker reduce paths (which feed each
+     * deserialised sketch through a {@link Union} and discard the wrapper) satisfy this trivially.
+     *
+     * <p>Explicit {@link ByteOrder#LITTLE_ENDIAN} matches the implicit native order produced by
+     * {@link Memory#wrap(byte[])} on the LE platforms Pinot targets — and the on-disk layout of
+     * Datasketches-serialised theta sketches.
+     */
     @Override
     public Sketch deserialize(ByteBuffer byteBuffer) {
-      byte[] bytes = new byte[byteBuffer.remaining()];
-      byteBuffer.get(bytes);
-      return Sketch.wrap(Memory.wrap(bytes));
+      return Sketch.wrap(Memory.wrap(byteBuffer, ByteOrder.LITTLE_ENDIAN));
     }
   };
 
@@ -1166,12 +1175,15 @@ public class ObjectSerDeUtils {
               new IntegerSummaryDeserializer());
         }
 
+        /**
+         * Wraps the buffer directly. {@code heapifySketch} materialises a heap-resident sketch
+         * during the call and does not retain a reference to the input memory, so this is a pure
+         * win — no lifetime concern.
+         */
         @Override
         public org.apache.datasketches.tuple.Sketch<IntegerSummary> deserialize(ByteBuffer byteBuffer) {
-          byte[] bytes = new byte[byteBuffer.remaining()];
-          byteBuffer.get(bytes);
-          return org.apache.datasketches.tuple.Sketches.heapifySketch(Memory.wrap(bytes),
-              new IntegerSummaryDeserializer());
+          return org.apache.datasketches.tuple.Sketches.heapifySketch(
+              Memory.wrap(byteBuffer, ByteOrder.LITTLE_ENDIAN), new IntegerSummaryDeserializer());
         }
       };
 
@@ -1206,11 +1218,14 @@ public class ObjectSerDeUtils {
       return CpcSketch.heapify(Memory.wrap(bytes));
     }
 
+    /**
+     * Wraps the buffer directly. {@link CpcSketch#heapify} materialises a heap-resident sketch
+     * during the call and does not retain a reference to the input memory, so this is a pure win —
+     * no lifetime concern.
+     */
     @Override
     public CpcSketch deserialize(ByteBuffer byteBuffer) {
-      byte[] bytes = new byte[byteBuffer.remaining()];
-      byteBuffer.get(bytes);
-      return CpcSketch.heapify(Memory.wrap(bytes));
+      return CpcSketch.heapify(Memory.wrap(byteBuffer, ByteOrder.LITTLE_ENDIAN));
     }
   };
 
@@ -1598,12 +1613,12 @@ public class ObjectSerDeUtils {
 
         // Note: The accumulator is designed to serialize as a sketch and should
         // not be deserialized in practice.
+        // The wrapped Sketch retains the buffer's bytes; the accumulator transitively pins them
+        // until its first threshold-triggered union, after which the wrapper is released.
         @Override
         public ThetaSketchAccumulator deserialize(ByteBuffer byteBuffer) {
           ThetaSketchAccumulator thetaSketchAccumulator = new ThetaSketchAccumulator();
-          byte[] bytes = new byte[byteBuffer.remaining()];
-          byteBuffer.get(bytes);
-          Sketch sketch = Sketch.wrap(Memory.wrap(bytes));
+          Sketch sketch = Sketch.wrap(Memory.wrap(byteBuffer, ByteOrder.LITTLE_ENDIAN));
           thetaSketchAccumulator.apply(sketch);
           return thetaSketchAccumulator;
         }
@@ -1625,14 +1640,13 @@ public class ObjectSerDeUtils {
 
         // Note: The accumulator is designed to serialize as a sketch and should
         // not be deserialized in practice.
+        // {@code heapifySketch} copies into heap, so the buffer is not retained beyond this call.
         @Override
         public TupleIntSketchAccumulator deserialize(ByteBuffer byteBuffer) {
           TupleIntSketchAccumulator tupleIntSketchAccumulator = new TupleIntSketchAccumulator();
-          byte[] bytes = new byte[byteBuffer.remaining()];
-          byteBuffer.get(bytes);
           org.apache.datasketches.tuple.Sketch<IntegerSummary> sketch =
-              org.apache.datasketches.tuple.Sketches.heapifySketch(Memory.wrap(bytes),
-                  new IntegerSummaryDeserializer());
+              org.apache.datasketches.tuple.Sketches.heapifySketch(
+                  Memory.wrap(byteBuffer, ByteOrder.LITTLE_ENDIAN), new IntegerSummaryDeserializer());
           tupleIntSketchAccumulator.apply(sketch);
           return tupleIntSketchAccumulator;
         }
@@ -1654,12 +1668,11 @@ public class ObjectSerDeUtils {
 
         // Note: The accumulator is designed to serialize as a sketch and should
         // not be deserialized in practice.
+        // {@link CpcSketch#heapify} copies into heap, so the buffer is not retained beyond this call.
         @Override
         public CpcSketchAccumulator deserialize(ByteBuffer byteBuffer) {
           CpcSketchAccumulator cpcSketchAccumulator = new CpcSketchAccumulator();
-          byte[] bytes = new byte[byteBuffer.remaining()];
-          byteBuffer.get(bytes);
-          CpcSketch sketch = CpcSketch.heapify(Memory.wrap(bytes));
+          CpcSketch sketch = CpcSketch.heapify(Memory.wrap(byteBuffer, ByteOrder.LITTLE_ENDIAN));
           cpcSketchAccumulator.apply(sketch);
           return cpcSketchAccumulator;
         }
