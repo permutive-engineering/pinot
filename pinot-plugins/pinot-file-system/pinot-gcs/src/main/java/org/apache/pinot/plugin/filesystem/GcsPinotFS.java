@@ -35,6 +35,7 @@ import com.google.cloud.storage.StorageException;
 import com.google.cloud.storage.StorageOptions;
 import com.google.common.base.Strings;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
@@ -383,6 +384,9 @@ public class GcsPinotFS extends BasePinotFS {
     }
     try {
       Blob blob = getBlob(new GcsUri(uri));
+      if (blob == null) {
+        throw new FileNotFoundException("File '" + uri + "' does not exist");
+      }
       // ReadChannel.limit is the absolute, exclusive end position; seek positions the start. This issues a
       // ranged GET so only [offset, offset + length) is transferred (truncated at end-of-file).
       ReadChannel reader = blob.reader();
